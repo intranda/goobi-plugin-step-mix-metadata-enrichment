@@ -1,0 +1,21 @@
+<ui:composition
+    xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:composite="http://java.sun.com/jsf/composite"
+    xmlns:f="http://java.sun.com/jsf/core"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:x="http://myfaces.apache.org/tomahawk"
+    xmlns:intranda="http://xmlns.jcp.org/jsf/composite/compositesPG">
+
+    <h:form>
+        <intranda:box
+            boxType="primary"
+            boxPadding="true"
+            icon="fa-puzzle-piece"
+            title="#{msgs.plugin}: #{msgs[('plugin_').concat(AktuelleSchritteForm.myPlugin.title)]}">
+            
+            <h:outputText value="hello step plugin: #{AktuelleSchritteForm.myPlugin.value}"/>
+        </intranda:box>        
+    </h:form>
+    
+</ui:composition>
