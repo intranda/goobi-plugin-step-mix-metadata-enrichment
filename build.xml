@@ -5,8 +5,8 @@
 		<exec executable="mvn">
 			<arg value="package"/>
 		</exec>
-		<copy file="module-main/target/plugin_intranda_step_kick_start.jar" todir="/opt/digiverso/goobi/plugins/step/" overwrite="true"/>
-		<copy file="module-gui/target/plugin_intranda_step_kick_start-GUI.jar" todir="/opt/digiverso/goobi/plugins/GUI/" overwrite="true"/>
+		<copy file="module-main/target/plugin_intranda_step_tif_metadata_extraction.jar" todir="/opt/digiverso/goobi/plugins/step/" overwrite="true"/>
+		<copy file="module-gui/target/plugin_intranda_step_tif_metadata_extraction-GUI.jar" todir="/opt/digiverso/goobi/plugins/GUI/" overwrite="true"/>
 	</target>
 
 </project>
