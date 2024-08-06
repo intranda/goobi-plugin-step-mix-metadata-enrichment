@@ -22,6 +22,8 @@ package de.intranda.goobi.plugins;
 import java.util.HashMap;
 
 import org.apache.commons.configuration.SubnodeConfiguration;
+import org.goobi.beans.Process;
+import org.goobi.beans.Project;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginGuiType;
 import org.goobi.production.enums.PluginReturnValue;
@@ -62,15 +64,12 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public PluginGuiType getPluginGuiType() {
-        return PluginGuiType.FULL;
-        // return PluginGuiType.PART;
-        // return PluginGuiType.PART_AND_FULL;
-        // return PluginGuiType.NONE;
+        return PluginGuiType.NONE;
     }
 
     @Override
     public String getPagePath() {
-        return "/uii/plugin_step_tif_metadata_extraction.xhtml";
+        return "";
     }
 
     @Override
@@ -114,5 +113,20 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
             return PluginReturnValue.ERROR;
         }
         return PluginReturnValue.FINISH;
+    }
+
+    public static void main(String[] args) {
+        TifMetadataExtractionStepPlugin plugin = new TifMetadataExtractionStepPlugin();
+
+        Project project = new Project();
+        project.setTitel("MyProject");
+        Process process = new Process();
+        process.setTitel("MyProcess");
+        process.setProjekt(project);
+        Step step = new Step();
+        step.setProzess(process);
+
+        plugin.initialize(step, "");
+        plugin.run();
     }
 }
