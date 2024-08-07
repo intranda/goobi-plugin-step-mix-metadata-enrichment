@@ -18,6 +18,7 @@ import org.goobi.beans.Project;
 import org.goobi.beans.Ruleset;
 import org.goobi.beans.Step;
 import org.goobi.beans.User;
+import org.goobi.production.enums.PluginReturnValue;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -69,25 +70,6 @@ public class TifMetadataExtractionPluginTest {
         System.setProperty("log4j.configurationFile", log4jFile);
     }
 
-    @Test
-    public void testConstructor() throws Exception {
-        TifMetadataExtractionStepPlugin plugin = new TifMetadataExtractionStepPlugin();
-        assertNotNull(plugin);
-    }
-
-    @Test
-    public void testInit() {
-        TifMetadataExtractionStepPlugin plugin = new TifMetadataExtractionStepPlugin();
-        plugin.initialize(step, "something");
-        assertEquals(step.getTitel(), plugin.getStep().getTitel());
-    }
-
-    @Test
-    public void testVersion() throws IOException {
-        String s = "xyz";
-        assertNotNull(s);
-    }
-
     @Before
     public void setUp() throws Exception {
         metadataDirectory = folder.newFolder("metadata");
@@ -116,6 +98,7 @@ public class TifMetadataExtractionPluginTest {
         EasyMock.expect(configurationHelper.isUseMasterDirectory()).andReturn(true).anyTimes();
         EasyMock.expect(configurationHelper.getConfigurationFolder()).andReturn(resourcesFolder).anyTimes();
         EasyMock.expect(configurationHelper.getNumberOfMetaBackups()).andReturn(0).anyTimes();
+        EasyMock.expect(configurationHelper.getImagePrefix()).andReturn("\\d{8}").anyTimes();
         EasyMock.replay(configurationHelper);
 
         PowerMock.mockStatic(VariableReplacer.class);
@@ -196,5 +179,23 @@ public class TifMetadataExtractionPluginTest {
         mediaDirectory.mkdir();
 
         // TODO add some file
+        Path imageSource = Paths.get(resourcesFolder, "CR_1_A_Fa_24_Lokalisation.jpg");
+        Path imageTarget = Paths.get(mediaDirectory.getAbsolutePath(), "00000010.jpg");
+        Files.copy(imageSource, imageTarget);
+    }
+
+    @Test
+    public void testInit() {
+        TifMetadataExtractionStepPlugin plugin = new TifMetadataExtractionStepPlugin();
+        plugin.initialize(step, "something");
+        assertEquals(step.getTitel(), plugin.getStep().getTitel());
+    }
+
+    @Test
+    public void testRun() throws IOException {
+        TifMetadataExtractionStepPlugin plugin = new TifMetadataExtractionStepPlugin();
+        plugin.initialize(step, "something");
+        PluginReturnValue result = plugin.run();
+        assertEquals(PluginReturnValue.FINISH, result);
     }
 }
