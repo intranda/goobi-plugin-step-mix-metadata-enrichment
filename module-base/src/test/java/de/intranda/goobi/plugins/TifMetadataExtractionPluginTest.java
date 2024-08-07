@@ -107,7 +107,6 @@ public class TifMetadataExtractionPluginTest {
         prefs = new Prefs();
         prefs.loadPrefs(resourcesFolder + "ruleset.xml");
         Fileformat ff = new MetsMods(prefs);
-        ff.read(metaTarget.toString());
 
         PowerMock.mockStatic(MetadatenHelper.class);
         EasyMock.expect(MetadatenHelper.getMetaFileType(EasyMock.anyString())).andReturn("mets").anyTimes();
