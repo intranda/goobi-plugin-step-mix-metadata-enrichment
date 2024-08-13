@@ -6,16 +6,23 @@
           3.) project name matches and step name is *
           4.) project name and step name are *
 	-->
-    
+
     <config>
         <!-- which projects to use for (can be more then one, otherwise use *) -->
         <project>*</project>
         <step>*</step>
-        
-        <!-- sample parameter -->
-        <value>test</value>
-        <!-- display button to finish the task directly from within the entered plugin -->
-        <allowTaskFinishButtons>true</allowTaskFinishButtons>
+        <folder>*</folder>
+
+        <!-- jhove configuration file path -->
+        <jhoveConfig>/opt/digiverso/goobi/config/jhove/jhove.conf</jhoveConfig>
+    </config>
+
+    <config>
+        <project>*</project>
+        <step>Custom Step</step>
+        <folder>custom_folder</folder>
+
+        <jhoveConfig>/opt/digiverso/goobi/config/jhove/jhove.conf</jhoveConfig>
     </config>
 
 </config_plugin>

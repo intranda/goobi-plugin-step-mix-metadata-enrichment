@@ -2,28 +2,31 @@ package de.intranda.goobi.plugins;
 
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
- *
+ * <p>
  * Visit the websites for more information.
- *          - https://goobi.io
- *          - https://www.intranda.com
- *          - https://github.com/intranda/goobi
- *
+ * - https://goobi.io
+ * - https://www.intranda.com
+ * - https://github.com/intranda/goobi
+ * <p>
  * This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free
  * Software Foundation; either version 2 of the License, or (at your option) any later version.
- *
+ * <p>
  * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
- *
+ * <p>
  * You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59
  * Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
  */
 
 import de.sub.goobi.config.ConfigPlugins;
+import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.NIOFileUtils;
 import de.sub.goobi.helper.StorageProvider;
+import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.XmlTools;
+import de.sub.goobi.helper.exceptions.DAOException;
+import de.sub.goobi.helper.exceptions.SwapException;
 import edu.harvard.hul.ois.jhove.App;
 import edu.harvard.hul.ois.jhove.JhoveBase;
 import edu.harvard.hul.ois.jhove.Module;
@@ -32,6 +35,8 @@ import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
 import org.apache.commons.configuration.SubnodeConfiguration;
+import org.apache.commons.digester.plugins.PluginException;
+import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginGuiType;
@@ -49,8 +54,11 @@ import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
 import ugh.dl.Md;
+import ugh.exceptions.PreferencesException;
+import ugh.exceptions.ReadException;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -58,33 +66,58 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @PluginImplementation
 @Log4j2
-public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
-    
+public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
+
     @Getter
-    private String title = "intranda_step_tif_metadata_extraction";
+    private String title = "intranda_step_mix_metadata_enrichment";
     @Getter
     private Step step;
     @Getter
-    private String value;
-    @Getter 
-    private boolean allowTaskFinishButtons;
+    private File jhoveConfigFile;
+    private List<String> configuredFoldersToRename;
+    private VariableReplacer variableReplacer;
+
+    @Getter
     private String returnPath;
 
     @Override
     public void initialize(Step step, String returnPath) {
         this.returnPath = returnPath;
         this.step = step;
-                
-        // read parameters from correct block in configuration file
-        SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
-        value = myconfig.getString("value", "default value"); 
-        allowTaskFinishButtons = myconfig.getBoolean("allowTaskFinishButtons", false);
-        log.info("TifMetadataExtraction step plugin initialized");
+
+        try {
+            this.variableReplacer = getVariableReplacer();
+
+            // read parameters from correct block in configuration file
+            SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
+            jhoveConfigFile = new File(myconfig.getString("jhoveConf", "/opt/digiverso/goobi/config/jhove/jhove.conf"));
+            configuredFoldersToRename = myconfig.getList("folder", List.of("*"))
+                    .stream()
+                    .map(Object::toString)
+                    .collect(Collectors.toList());
+            log.info("MixMetadataEnrichmentPlugin step plugin initialized");
+        } catch (PluginException e) {
+            log.error(e.getMessage());
+            log.error(e);
+        }
+    }
+
+    private VariableReplacer getVariableReplacer() throws PluginException {
+        try {
+            Fileformat fileformat = getStep().getProzess().readMetadataFile();
+            return new VariableReplacer(fileformat != null ? fileformat.getDigitalDocument() : null,
+                    getStep().getProzess().getRegelsatz().getPreferences(), getStep().getProzess(), step);
+        } catch (ReadException | IOException | SwapException | PreferencesException e1) {
+            throw new PluginException("Errors happened while trying to initialize the Fileformat and VariableReplacer", e1);
+        }
     }
 
     @Override
@@ -111,7 +144,7 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
     public String finish() {
         return "/uii" + returnPath;
     }
-    
+
     @Override
     public int getInterfaceVersion() {
         return 0;
@@ -121,7 +154,7 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
     public HashMap<String, StepReturnValue> validate() {
         return null;
     }
-    
+
     @Override
     public boolean execute() {
         PluginReturnValue ret = run();
@@ -135,16 +168,13 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
 
         try {
             Calendar calendar = Calendar.getInstance();
-            App app = new App(TifMetadataExtractionStepPlugin.class.getSimpleName(), "1.0",
-                    new int[] { calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH) }, "jHove", "");
+            App app = new App(MixMetadataEnrichmentPlugin.class.getSimpleName(), "1.0",
+                    new int[]{calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)}, "jHove", "");
 
             JhoveBase jhoveBase = new JhoveBase();
 
-//            File jhoveConfigFile = new File(configuration.getJhoveConfigurationFile());
-            File jhoveConfigFile = new File("/opt/digiverso/goobi/config/jhove/jhove.conf");
-
             jhoveBase.init(jhoveConfigFile.getAbsolutePath(), null);
-            Path outputPath = Paths.get(getStep().getProzess().getProcessDataDirectory(), "validation", System.currentTimeMillis() + "_jhove");
+            Path outputPath = Paths.get(getStep().getProzess().getProcessDataDirectory(), "mix_metadata", System.currentTimeMillis() + "_jhove");
             Files.createDirectories(outputPath);
 
             List<AbstractMap.SimpleEntry<String, String>> inputOutputList = new ArrayList<>();
@@ -157,17 +187,20 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
             jhoveBase.setChecksumFlag(false);
             jhoveBase.setShowRawFlag(true);
             jhoveBase.setSignatureFlag(false);
-            List<Path> imagesInFolder = new ArrayList<>();
+            List<Path> filesToAnalyze = new ArrayList<>();
 
-//        for (String f : configuration.getFolders()) {
-            imagesInFolder.addAll(StorageProvider.getInstance().listFiles(getStep().getProzess().getImagesTifDirectory(false), NIOFileUtils.imageNameFilter));
-//        }
+            List<Path> foldersToAnalyze = determineFoldersToAnalyze();
+            log.trace("Performing analysis in these folders: {}", foldersToAnalyze.stream().map(Path::toString).collect(Collectors.joining(", ")));
 
-            for (Path image : imagesInFolder) {
-                String inputName = image.getFileName().toString();
+            for (Path folder : foldersToAnalyze) {
+                filesToAnalyze.addAll(StorageProvider.getInstance().listFiles(folder.toString(), NIOFileUtils.imageNameFilter));
+            }
+
+            for (Path file : filesToAnalyze) {
+                String inputName = file.toString().replace("/", "_").replace("\\", "_"); // use full path as target to avoid file name conflicts in different sub directories
                 String outputName = inputName.substring(0, inputName.lastIndexOf('.')) + ".xml";
                 Path fOutputPath = outputPath.resolve(outputName);
-                inputOutputList.add(new AbstractMap.SimpleEntry<>(image.toString(), fOutputPath.toString()));
+                inputOutputList.add(new AbstractMap.SimpleEntry<>(file.toString(), fOutputPath.toString()));
             }
 
             for (AbstractMap.SimpleEntry<String, String> se : inputOutputList) {
@@ -182,20 +215,18 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
 
             for (AbstractMap.SimpleEntry<String, String> se : inputOutputList) {
                 Document jdomDocument = jdomBuilder.build(se.getValue());
-                Element rootNode = jdomDocument.getRootElement();
 
                 XPathFactory xPathFactory = XPathFactory.instance();
                 XPathExpression<Element> mixXPath = xPathFactory.compile("//*[local-name()='mix']", Filters.element());
                 List<Element> result = mixXPath.evaluate(jdomDocument);
-                System.err.println(result.size());
 
                 if (result.isEmpty()) {
-                    log.warn("No MIX metadata found for image: " + se.getKey());
+                    log.warn("No MIX metadata found for image: {}", se.getKey());
                     continue;
                 }
 
                 if (result.size() != 1) {
-                    log.error("Only a single MIX metadata result expected, found: " + result.size());
+                    log.error("Only a single MIX metadata result expected, found: {}", result.size());
                     return PluginReturnValue.ERROR;
                 }
 
@@ -206,7 +237,7 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
                         .findFirst();
 
                 if (page.isEmpty()) {
-                    log.warn("Can't save MIX metadata to Mets file, file reference does not exist in Mets file: " + se.getKey());
+                    log.warn("Can't save MIX metadata to Mets file, file reference does not exist in Mets file: {}", se.getKey());
                     continue;
                 }
 
@@ -221,16 +252,56 @@ public class TifMetadataExtractionStepPlugin implements IStepPluginVersion2 {
             handleException(e);
             successful = false;
         }
-        
-        log.info("TifMetadataExtraction step plugin executed");
+
+        log.info("MixMetadataEnrichmentPlugin step plugin executed");
         if (!successful) {
             return PluginReturnValue.ERROR;
         }
         return PluginReturnValue.FINISH;
     }
 
+    private List<Path> determineFoldersToAnalyze() throws IOException, SwapException, DAOException {
+        List<Path> result = new LinkedList<>();
+        for (String folderSpecification : configuredFoldersToRename) {
+            result.addAll(determineRealPathsForConfiguredFolder(folderSpecification));
+        }
+        return result.stream().distinct().collect(Collectors.toList());
+    }
+
+    private List<Path> determineRealPathsForConfiguredFolder(String configuredFolder) throws IOException, SwapException, DAOException {
+        if ("*".equals(configuredFolder)) {
+            return determineDefaultFoldersToRename();
+        } else {
+            return transformConfiguredFolderSpecificationToRealPath(configuredFolder);
+        }
+    }
+
+    private List<Path> determineDefaultFoldersToRename() throws IOException, SwapException, DAOException {
+        Process process = getStep().getProzess();
+        return Stream.of(
+                        Paths.get(process.getImagesOrigDirectory(false)),
+                        Paths.get(process.getImagesTifDirectory(false)),
+                        Paths.get(process.getOcrAltoDirectory()),
+                        Paths.get(process.getOcrPdfDirectory()),
+                        Paths.get(process.getOcrTxtDirectory()),
+                        Paths.get(process.getOcrXmlDirectory()))
+                .filter(this::pathIsPresent)
+                .collect(Collectors.toList());
+    }
+
+    private List<Path> transformConfiguredFolderSpecificationToRealPath(String folderSpecification) throws IOException, SwapException {
+        String folder = ConfigurationHelper.getInstance().getAdditionalProcessFolderName(folderSpecification);
+        folder = variableReplacer.replace(folder);
+        Path configuredFolder = Paths.get(getStep().getProzess().getImagesDirectory(), folder);
+        return List.of(configuredFolder);
+    }
+
+    private boolean pathIsPresent(Path path) {
+        return StorageProvider.getInstance().isDirectory(path);
+    }
+
     private void handleException(Exception e) {
         log.error(e);
-        Helper.addMessageToProcessJournal(getStep().getProzess().getId(), LogType.ERROR, "The image metadata extraction failed: " + e.getMessage(), "");
+        Helper.addMessageToProcessJournal(getStep().getProzess().getId(), LogType.ERROR, "The metadata extraction failed: " + e.getMessage(), "");
     }
 }
