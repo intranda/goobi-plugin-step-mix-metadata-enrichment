@@ -7,7 +7,7 @@
     <relativePath />
   </parent>
   <groupId>io.goobi.workflow.plugin</groupId>
-  <artifactId>plugin-step-tif-metadata-extraction</artifactId>
+  <artifactId>plugin-step-mix-metadata-enrichment</artifactId>
   <packaging>pom</packaging>
   <modules>
     <module>module-base</module>
