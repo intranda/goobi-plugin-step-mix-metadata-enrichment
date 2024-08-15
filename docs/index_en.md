@@ -2,7 +2,7 @@
 title: MIX Metadata Enrichment Plugin
 identifier: intranda_step_mix_metadata_enrichment
 description: Step plugin for enriching the Mets file with technical metadata in MIX format using JHove.
-published: false
+published: true
 ---
 
 ## Introduction
