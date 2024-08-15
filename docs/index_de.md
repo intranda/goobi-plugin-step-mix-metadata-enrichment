@@ -1,7 +1,7 @@
 ---
 title: MIX Metadata Enrichment Plugin
 identifier: intranda_step_mix_metadata_enrichment
-description: Dieses Step-Plugin für den Goobi-Workflow nutzt JHove, um technische Metadaten aus Dateien zu extrahieren und die Ergebnisse in der METS-Datei eines Goobi-Vorgangs zu speichern.
+description: Dieses Step-Plugin für Goobi-Workflow nutzt JHove, um technische Metadaten aus Dateien zu extrahieren und die Ergebnisse in der METS-Datei eines Goobi-Vorgangs zu speichern.
 published: true
 ---
 
