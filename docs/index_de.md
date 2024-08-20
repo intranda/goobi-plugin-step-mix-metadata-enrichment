@@ -1,20 +1,20 @@
 ---
-title: ZZZ
-identifier: intranda_step_ZZZ
-description: Step Plugin für ZZZ
-published: false
+title: MIX Metadata Enrichment Plugin
+identifier: intranda_step_mix_metadata_enrichment
+description: Dieses Step-Plugin für Goobi-Workflow nutzt JHove, um technische Metadaten aus Dateien zu extrahieren und die Ergebnisse in der METS-Datei eines Goobi-Vorgangs zu speichern.
+published: true
 ---
 
 ## Einführung
-Diese Dokumentation erläutert das Plugin für ZZZ.
+Diese Dokumentation erläutert das Plugin zum MIX Metadata anreichern.
 
 ## Installation
 Um das Plugin nutzen zu können, müssen folgende Dateien installiert werden:
 
 ```bash
-/opt/digiverso/goobi/plugins/step/plugin-step-ZZZ-base.jar
-/opt/digiverso/goobi/plugins/GUI/plugin-step-ZZZ-gui.jar
-/opt/digiverso/goobi/config/plugin_intranda_step_ZZZ.xml
+/opt/digiverso/goobi/plugins/step/plugin-step-mix-metadata-enrichment-base.jar
+/opt/digiverso/goobi/config/plugin_intranda_step_mix_metadata_enrichment.xml
+/opt/digiverso/goobi/config/jhove/jhove.conf
 ```
 
 Nach der Installation des Plugins kann dieses innerhalb des Workflows für die jeweiligen Arbeitsschritte ausgewählt und somit automatisch ausgeführt werden. Ein Workflow könnte dabei beispielhaft wie folgt aussehen:
@@ -27,11 +27,12 @@ Für die Verwendung des Plugins muss dieses in einem Arbeitsschritt ausgewählt 
 
 
 ## Überblick und Funktionsweise
-ZZZ
+Wenn das Plugin ausgeführt wird, werden alle Bilddateien in den konfigurierten Ordnern mit JHove analysiert und die technischen Metadaten im MIX Format extrahiert.
+Diese technischen Metadaten werden dann in der Mets Datei des Vorgangs hinzugefügt und dort mit den jeweiligen Bilddateien verlinkt.
 
 
 ## Konfiguration
-Die Konfiguration des Plugins erfolgt in der Datei `plugin_intranda_step_ZZZ.xml` wie hier aufgezeigt:
+Die Konfiguration des Plugins erfolgt in der Datei `plugin_intranda_step_mix_metadata_enrichment.xml` wie hier aufgezeigt:
 
 {{CONFIG_CONTENT}}
 
@@ -39,30 +40,5 @@ Die Konfiguration des Plugins erfolgt in der Datei `plugin_intranda_step_ZZZ.xml
 
 Parameter               | Erläuterung
 ------------------------|------------------------------------
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
-``                      | 
+`folder`                | Angabe des Ordners, der von JHove analysiert werden soll um technische Metadaten zu extrahieren. <br /><br />Es können mehrere Ordner angegeben werden, indem das `<folder>` Element wiederholt wird. Der Wert `*` kann verwendet werden, um alle Standardordner auszuwählen.
+`jhoveConfig`           | Der Pfad zur JHove Konfigurationsdatei. Eine Beispielkonfiguration liegt dem Plugin bei.

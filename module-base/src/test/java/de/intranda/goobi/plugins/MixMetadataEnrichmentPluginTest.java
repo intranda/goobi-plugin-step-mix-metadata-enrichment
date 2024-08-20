@@ -18,8 +18,10 @@ import org.goobi.beans.Project;
 import org.goobi.beans.Ruleset;
 import org.goobi.beans.Step;
 import org.goobi.beans.User;
+import org.goobi.production.enums.PluginReturnValue;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -43,7 +45,7 @@ import ugh.fileformats.mets.MetsMods;
 @PrepareForTest({ MetadatenHelper.class, VariableReplacer.class, ConfigurationHelper.class, ProcessManager.class,
         MetadataManager.class })
 @PowerMockIgnore({ "javax.management.*", "javax.xml.*", "org.xml.*", "org.w3c.*", "javax.net.ssl.*", "jdk.internal.reflect.*" })
-public class TifMetadataExtractionPluginTest {
+public class MixMetadataEnrichmentPluginTest {
 
     private static String resourcesFolder;
 
@@ -67,25 +69,6 @@ public class TifMetadataExtractionPluginTest {
         String log4jFile = resourcesFolder + "log4j2.xml"; // for junit tests in eclipse
 
         System.setProperty("log4j.configurationFile", log4jFile);
-    }
-
-    @Test
-    public void testConstructor() throws Exception {
-        TifMetadataExtractionStepPlugin plugin = new TifMetadataExtractionStepPlugin();
-        assertNotNull(plugin);
-    }
-
-    @Test
-    public void testInit() {
-        TifMetadataExtractionStepPlugin plugin = new TifMetadataExtractionStepPlugin();
-        plugin.initialize(step, "something");
-        assertEquals(step.getTitel(), plugin.getStep().getTitel());
-    }
-
-    @Test
-    public void testVersion() throws IOException {
-        String s = "xyz";
-        assertNotNull(s);
     }
 
     @Before
@@ -116,6 +99,7 @@ public class TifMetadataExtractionPluginTest {
         EasyMock.expect(configurationHelper.isUseMasterDirectory()).andReturn(true).anyTimes();
         EasyMock.expect(configurationHelper.getConfigurationFolder()).andReturn(resourcesFolder).anyTimes();
         EasyMock.expect(configurationHelper.getNumberOfMetaBackups()).andReturn(0).anyTimes();
+        EasyMock.expect(configurationHelper.getImagePrefix()).andReturn("\\d{8}").anyTimes();
         EasyMock.replay(configurationHelper);
 
         PowerMock.mockStatic(VariableReplacer.class);
@@ -124,7 +108,6 @@ public class TifMetadataExtractionPluginTest {
         prefs = new Prefs();
         prefs.loadPrefs(resourcesFolder + "ruleset.xml");
         Fileformat ff = new MetsMods(prefs);
-        ff.read(metaTarget.toString());
 
         PowerMock.mockStatic(MetadatenHelper.class);
         EasyMock.expect(MetadatenHelper.getMetaFileType(EasyMock.anyString())).andReturn("mets").anyTimes();
@@ -195,6 +178,25 @@ public class TifMetadataExtractionPluginTest {
         File mediaDirectory = new File(imageDirectory.getAbsolutePath(), "00469418X_media");
         mediaDirectory.mkdir();
 
-        // TODO add some file
+        // TODO: find some files for tests
+        Path imageSource = Paths.get(resourcesFolder, "CR_1_A_Fa_24_Lokalisation.jpg");
+        Path imageTarget = Paths.get(mediaDirectory.getAbsolutePath(), "00000010.jpg");
+        Files.copy(imageSource, imageTarget);
+    }
+
+    @Test
+    public void testInit() {
+        MixMetadataEnrichmentPlugin plugin = new MixMetadataEnrichmentPlugin();
+        plugin.initialize(step, "something");
+        assertEquals(step.getTitel(), plugin.getStep().getTitel());
+    }
+
+    @Test
+    @Ignore
+    public void testRun() throws IOException {
+        MixMetadataEnrichmentPlugin plugin = new MixMetadataEnrichmentPlugin();
+        plugin.initialize(step, "something");
+        PluginReturnValue result = plugin.run();
+        assertEquals(PluginReturnValue.FINISH, result);
     }
 }

@@ -2,9 +2,9 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.goobi.workflow.plugin</groupId>
-    <artifactId>plugin-step-tif-metadata-extraction</artifactId>
-    <version>24.03-SNAPSHOT</version>
+    <artifactId>plugin-step-mix-metadata-enrichment</artifactId>
+    <version>24.07</version>
   </parent>
-  <artifactId>plugin-step-tif-metadata-extraction-base</artifactId>
+  <artifactId>plugin-step-mix-metadata-enrichment-base</artifactId>
   <packaging>jar</packaging>
 </project>
