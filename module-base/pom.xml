@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.goobi.workflow.plugin</groupId>
     <artifactId>plugin-step-mix-metadata-enrichment</artifactId>
-    <version>24.07-SNAPSHOT</version>
+    <version>24.07</version>
   </parent>
   <artifactId>plugin-step-mix-metadata-enrichment-base</artifactId>
   <packaging>jar</packaging>
