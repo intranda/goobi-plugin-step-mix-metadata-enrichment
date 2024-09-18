@@ -232,9 +232,12 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
 
                 // Find relevant page element
                 String currentImageName = Paths.get(se.getKey()).getFileName().toString();
-                Optional<DocStruct> page = physical.getAllChildren().stream()
-                        .filter(p -> p.getImageName().equals(currentImageName))
-                        .findFirst();
+                Optional<DocStruct> page = Optional.empty();
+                if (physical.getAllChildren() != null) {
+                    page = physical.getAllChildren().stream()
+                            .filter(p -> p.getImageName().equals(currentImageName))
+                            .findFirst();
+                }
 
                 if (page.isEmpty()) {
                     log.warn("Can't save MIX metadata to Mets file, file reference does not exist in Mets file: {}", se.getKey());
