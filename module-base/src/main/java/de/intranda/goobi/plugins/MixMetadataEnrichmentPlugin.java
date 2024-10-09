@@ -25,18 +25,19 @@ import de.sub.goobi.helper.NIOFileUtils;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.XmlTools;
-import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import edu.harvard.hul.ois.jhove.App;
 import edu.harvard.hul.ois.jhove.JhoveBase;
 import edu.harvard.hul.ois.jhove.Module;
 import edu.harvard.hul.ois.jhove.OutputHandler;
+import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
+import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.apache.commons.digester.plugins.PluginException;
-import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginGuiType;
@@ -46,6 +47,7 @@ import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.jdom2.Namespace;
 import org.jdom2.filter.Filters;
 import org.jdom2.input.SAXBuilder;
 import org.jdom2.xpath.XPathExpression;
@@ -59,6 +61,7 @@ import ugh.exceptions.ReadException;
 
 import java.io.File;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -66,15 +69,33 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @PluginImplementation
 @Log4j2
 public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
+
+    @Data
+    class ExtraMapping {
+        private String source;
+        private String target;
+        private String transform;
+
+        private XPathExpression<Element> sourceXPathExpression;
+
+        public ExtraMapping(String source, String target, String transform) {
+            this.source = source;
+            this.target = target;
+            this.transform = transform;
+            this.sourceXPathExpression = XPathFactory.instance().compile(source, Filters.element(), null, NAMESPACE_JHOVE);
+        }
+
+        public Element find(Document doc) {
+            return this.sourceXPathExpression.evaluateFirst(doc);
+        }
+    }
 
     @Getter
     private String title = "intranda_step_mix_metadata_enrichment";
@@ -82,8 +103,13 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
     private Step step;
     @Getter
     private File jhoveConfigFile;
-    private List<String> configuredFoldersToRename;
+    private String configuredFolderToScan;
+    private List<ExtraMapping> extraMappings;
     private VariableReplacer variableReplacer;
+
+
+    private static final Namespace NAMESPACE_JHOVE = Namespace.getNamespace("jhove", "http://hul.harvard.edu/ois/xml/ns/jhove");
+    private static final Namespace NAMESPACE_MIX = Namespace.getNamespace("mix", "http://www.loc.gov/mix/v20");
 
     @Getter
     private String returnPath;
@@ -99,10 +125,8 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
             // read parameters from correct block in configuration file
             SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
             jhoveConfigFile = new File(myconfig.getString("jhoveConf", "/opt/digiverso/goobi/config/jhove/jhove.conf"));
-            configuredFoldersToRename = myconfig.getList("folder", List.of("*"))
-                    .stream()
-                    .map(Object::toString)
-                    .collect(Collectors.toList());
+            configuredFolderToScan = myconfig.getString("folder", "master");
+            extraMappings = parseExtraMappings(myconfig.configurationsAt("extraMappings"));
             log.info("MixMetadataEnrichmentPlugin step plugin initialized");
         } catch (PluginException e) {
             log.error(e.getMessage());
@@ -118,6 +142,18 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         } catch (ReadException | IOException | SwapException | PreferencesException e1) {
             throw new PluginException("Errors happened while trying to initialize the Fileformat and VariableReplacer", e1);
         }
+    }
+
+    private @NonNull List<ExtraMapping> parseExtraMappings(List<HierarchicalConfiguration> config) {
+        return config.stream()
+                .flatMap(c -> c.configurationsAt("value").stream())
+                .map(c -> new ExtraMapping(
+                                c.getString("@source"),
+                                c.getString("@target"),
+                                c.getString("@transform")
+                        )
+                )
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -189,15 +225,13 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
             jhoveBase.setSignatureFlag(false);
             List<Path> filesToAnalyze = new ArrayList<>();
 
-            List<Path> foldersToAnalyze = determineFoldersToAnalyze();
-            log.trace("Performing analysis in these folders: {}", foldersToAnalyze.stream().map(Path::toString).collect(Collectors.joining(", ")));
+            Path folderToAnalyze = determineFolderToAnalyze();
+            log.trace("Performing analysis in the folder: {}", folderToAnalyze.toString());
 
-            for (Path folder : foldersToAnalyze) {
-                filesToAnalyze.addAll(StorageProvider.getInstance().listFiles(folder.toString(), NIOFileUtils.imageNameFilter));
-            }
+            filesToAnalyze.addAll(StorageProvider.getInstance().listFiles(folderToAnalyze.toString(), NIOFileUtils.imageNameFilter));
 
             for (Path file : filesToAnalyze) {
-                String inputName = file.toString().replace("/", "_").replace("\\", "_"); // use full path as target to avoid file name conflicts in different sub directories
+                String inputName = file.getFileName().toString();
                 String outputName = inputName.substring(0, inputName.lastIndexOf('.')) + ".xml";
                 Path fOutputPath = outputPath.resolve(outputName);
                 inputOutputList.add(new AbstractMap.SimpleEntry<>(file.toString(), fOutputPath.toString()));
@@ -212,30 +246,47 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
             DigitalDocument dd = ff.getDigitalDocument();
             DocStruct physical = dd.getPhysicalDocStruct();
             SAXBuilder jdomBuilder = XmlTools.getSAXBuilder();
+            MixElementSorter mixElementSorter = new MixElementSorter();
 
             for (AbstractMap.SimpleEntry<String, String> se : inputOutputList) {
                 Document jdomDocument = jdomBuilder.build(se.getValue());
 
                 XPathFactory xPathFactory = XPathFactory.instance();
-                XPathExpression<Element> mixXPath = xPathFactory.compile("//*[local-name()='mix']", Filters.element());
-                List<Element> result = mixXPath.evaluate(jdomDocument);
 
-                if (result.isEmpty()) {
+                XPathExpression<Element> mixXPath = xPathFactory.compile("//*[local-name()='mix']", Filters.element());
+
+                List<Element> resultSet = mixXPath.evaluate(jdomDocument);
+
+                if (resultSet.isEmpty()) {
                     log.warn("No MIX metadata found for image: {}", se.getKey());
                     continue;
                 }
 
-                if (result.size() != 1) {
-                    log.error("Only a single MIX metadata result expected, found: {}", result.size());
+                if (resultSet.size() != 1) {
+                    log.error("Only a single MIX metadata result expected, found: {}", resultSet.size());
                     return PluginReturnValue.ERROR;
                 }
+
+                Element result = resultSet.get(0);
+
+                for (ExtraMapping em : extraMappings) {
+                    Element source = em.find(jdomDocument);
+                    if (source == null) {
+                        continue;
+                    }
+                    String value = source.getText();
+                    Element target = getOrCreateTarget(result, em.target, NAMESPACE_MIX);
+                    saveTransformedValue(target, value, em.transform);
+                }
+
+                mixElementSorter.fixOrder(result);
 
                 // Find relevant page element
                 String currentImageName = Paths.get(se.getKey()).getFileName().toString();
                 Optional<DocStruct> page = Optional.empty();
                 if (physical.getAllChildren() != null) {
                     page = physical.getAllChildren().stream()
-                            .filter(p -> p.getImageName().equals(currentImageName))
+                            .filter(p -> filePrefixEquals(p.getImageName(), currentImageName))
                             .findFirst();
                 }
 
@@ -244,7 +295,7 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
                     continue;
                 }
 
-                Md md = new Md(result.get(0), Md.MdType.TECH_MD);
+                Md md = new Md(result, Md.MdType.TECH_MD);
                 md.generateId();
                 dd.addTechMd(md);
                 page.get().setAdmId(md.getId());
@@ -263,44 +314,73 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         return PluginReturnValue.FINISH;
     }
 
-    private List<Path> determineFoldersToAnalyze() throws IOException, SwapException, DAOException {
-        List<Path> result = new LinkedList<>();
-        for (String folderSpecification : configuredFoldersToRename) {
-            result.addAll(determineRealPathsForConfiguredFolder(folderSpecification));
+    private void saveTransformedValue(Element element, String value, String transform) {
+        if (transform == null || transform.isBlank()) {
+            element.setText(value);
+            return;
         }
-        return result.stream().distinct().collect(Collectors.toList());
-    }
-
-    private List<Path> determineRealPathsForConfiguredFolder(String configuredFolder) throws IOException, SwapException, DAOException {
-        if ("*".equals(configuredFolder)) {
-            return determineDefaultFoldersToRename();
-        } else {
-            return transformConfiguredFolderSpecificationToRealPath(configuredFolder);
+        switch (transform) {
+            case "rational2real" -> element.setText(calculateDivision(value));
+            case "rational2rationalType" -> element.addContent(generateRationalTypeElement(value));
+            default -> element.setText(calculateDivision(value));
         }
     }
 
-    private List<Path> determineDefaultFoldersToRename() throws IOException, SwapException, DAOException {
-        Process process = getStep().getProzess();
-        return Stream.of(
-                        Paths.get(process.getImagesOrigDirectory(false)),
-                        Paths.get(process.getImagesTifDirectory(false)),
-                        Paths.get(process.getOcrAltoDirectory()),
-                        Paths.get(process.getOcrPdfDirectory()),
-                        Paths.get(process.getOcrTxtDirectory()),
-                        Paths.get(process.getOcrXmlDirectory()))
-                .filter(this::pathIsPresent)
-                .collect(Collectors.toList());
+    private String calculateDivision(String value) {
+        if (!value.contains("/")) {
+            return value;
+        }
+        String[] parts = value.split("/");
+        double a = Double.parseDouble(parts[0]);
+        double b = Double.parseDouble(parts[1]);
+        double result = a / b;
+        return "" + result;
     }
 
-    private List<Path> transformConfiguredFolderSpecificationToRealPath(String folderSpecification) throws IOException, SwapException {
-        String folder = ConfigurationHelper.getInstance().getAdditionalProcessFolderName(folderSpecification);
-        folder = variableReplacer.replace(folder);
-        Path configuredFolder = Paths.get(getStep().getProzess().getImagesDirectory(), folder);
-        return List.of(configuredFolder);
+    private List<Element> generateRationalTypeElement(String value) {
+        if (!value.contains("/")) {
+            throw new IllegalArgumentException("Unsupported value \"" + value + "\"");
+        }
+        String[] parts = value.split("/");
+        Element numerator = new Element("numerator", NAMESPACE_MIX);
+        numerator.setText(parts[0]);
+        Element denominator = new Element("denominator", NAMESPACE_MIX);
+        denominator.setText(parts[1]);
+        return List.of(numerator, denominator);
     }
 
-    private boolean pathIsPresent(Path path) {
-        return StorageProvider.getInstance().isDirectory(path);
+    private Element getOrCreateTarget(Element result, String target, Namespace namespace) {
+        String[] parts = target.split("/");
+        Element currentElement = result;
+        for (String currentPart : parts) {
+            Optional<Element> nextElement = currentElement.getChildren().stream()
+                    .filter(e -> e.getName().equals(currentPart))
+                    .findFirst();
+            if (nextElement.isEmpty()) {
+                Element newChild = new Element(currentPart, namespace);
+                currentElement.addContent(newChild);
+                nextElement = Optional.of(newChild);
+            }
+            currentElement = nextElement.orElseThrow();
+        }
+        return currentElement;
+    }
+
+    private boolean filePrefixEquals(String a, String b) {
+        return a.substring(0, a.lastIndexOf('.')).equals(b.substring(0, b.lastIndexOf('.')));
+    }
+
+    private Path determineFolderToAnalyze() throws IOException, SwapException {
+        String folder = variableReplacer.replace(determineFolderName(configuredFolderToScan));
+        return Paths.get(getStep().getProzess().getImagesDirectory(), folder);
+    }
+
+    private String determineFolderName(String configuredFolderToScan) {
+        return switch (configuredFolderToScan) {
+            case "master" -> ConfigurationHelper.getInstance().getProcessImagesMasterDirectoryName();
+            case "media", "main" -> ConfigurationHelper.getInstance().getProcessImagesMainDirectoryName();
+            default -> ConfigurationHelper.getInstance().getAdditionalProcessFolderName(configuredFolderToScan);
+        };
     }
 
     private void handleException(Exception e) {

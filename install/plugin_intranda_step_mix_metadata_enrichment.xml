@@ -11,10 +11,19 @@
         <!-- which projects to use for (can be more then one, otherwise use *) -->
         <project>*</project>
         <step>*</step>
-        <folder>*</folder>
+        <folder>master</folder>
 
         <!-- jhove configuration file path -->
         <jhoveConfig>/opt/digiverso/goobi/config/jhove/jhove.conf</jhoveConfig>
+        <extraMappings>
+            <value source="//jhove:property[jhove:name='FNumber']//jhove:value[1]" target="ImageCaptureMetadata/DigitalCameraCapture/CameraCaptureSettings/ImageData/fNumber" transform="rational2real"/>
+            <value source="//jhove:property[jhove:name='ExposureTime']//jhove:value[1]" target="ImageCaptureMetadata/DigitalCameraCapture/CameraCaptureSettings/ImageData/exposureTime" transform="rational2real"/>
+            <value source="//jhove:property[jhove:name='ISOSpeedRatings']//jhove:value[1]" target="ImageCaptureMetadata/DigitalCameraCapture/CameraCaptureSettings/ImageData/isoSpeedRatings"/>
+            <value source="//jhove:property[jhove:name='ShutterSpeedValue']//jhove:value[1]" target="ImageCaptureMetadata/DigitalCameraCapture/CameraCaptureSettings/ImageData/shutterSpeedValue" transform="rational2rationalType"/>
+            <value source="//jhove:property[jhove:name='ApertureValue']//jhove:value[1]" target="ImageCaptureMetadata/DigitalCameraCapture/CameraCaptureSettings/ImageData/apertureValue" transform="rational2rationalType"/>
+            <value source="//jhove:property[jhove:name='ExposureBiasValue']//jhove:value[1]" target="ImageCaptureMetadata/DigitalCameraCapture/CameraCaptureSettings/ImageData/exposureBiasValue" transform="rational2rationalType"/>
+            <value source="//jhove:property[jhove:name='MaxApertureValue']//jhove:value[1]" target="ImageCaptureMetadata/DigitalCameraCapture/CameraCaptureSettings/ImageData/maxApertureValue" transform="rational2rationalType"/>
+        </extraMappings>
     </config>
 
     <config>
