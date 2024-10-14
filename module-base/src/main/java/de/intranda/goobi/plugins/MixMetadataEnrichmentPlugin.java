@@ -30,6 +30,7 @@ import edu.harvard.hul.ois.jhove.App;
 import edu.harvard.hul.ois.jhove.JhoveBase;
 import edu.harvard.hul.ois.jhove.Module;
 import edu.harvard.hul.ois.jhove.OutputHandler;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
@@ -45,9 +46,12 @@ import org.goobi.production.enums.PluginReturnValue;
 import org.goobi.production.enums.PluginType;
 import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
+import org.jdom2.Content;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.Namespace;
+import org.jdom2.Parent;
+import org.jdom2.Text;
 import org.jdom2.filter.Filters;
 import org.jdom2.input.SAXBuilder;
 import org.jdom2.xpath.XPathExpression;
@@ -78,6 +82,14 @@ import java.util.stream.Collectors;
 public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
 
     @Data
+    @AllArgsConstructor
+    class RenameMapping {
+        private String from;
+        private String to;
+        private boolean removeEmptyParents;
+    }
+
+    @Data
     class ExtraMapping {
         private String source;
         private String target;
@@ -104,6 +116,7 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
     @Getter
     private File jhoveConfigFile;
     private String configuredFolderToScan;
+    private List<RenameMapping> renameMappings;
     private List<ExtraMapping> extraMappings;
     private VariableReplacer variableReplacer;
 
@@ -126,6 +139,7 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
             SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
             jhoveConfigFile = new File(myconfig.getString("jhoveConf", "/opt/digiverso/goobi/config/jhove/jhove.conf"));
             configuredFolderToScan = myconfig.getString("folder", "master");
+            renameMappings = parseRenameMappings(myconfig.configurationsAt("renameMappings"));
             extraMappings = parseExtraMappings(myconfig.configurationsAt("extraMappings"));
             log.info("MixMetadataEnrichmentPlugin step plugin initialized");
         } catch (PluginException e) {
@@ -142,6 +156,18 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         } catch (ReadException | IOException | SwapException | PreferencesException e1) {
             throw new PluginException("Errors happened while trying to initialize the Fileformat and VariableReplacer", e1);
         }
+    }
+
+    private @NonNull List<RenameMapping> parseRenameMappings(List<HierarchicalConfiguration> config) {
+        return config.stream()
+                .flatMap(c -> c.configurationsAt("value").stream())
+                .map(c -> new RenameMapping(
+                                c.getString("@from"),
+                                c.getString("@to"),
+                                c.getBoolean("@removeEmptyParents", false)
+                        )
+                )
+                .collect(Collectors.toList());
     }
 
     private @NonNull List<ExtraMapping> parseExtraMappings(List<HierarchicalConfiguration> config) {
@@ -279,6 +305,10 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
                     saveTransformedValue(target, value, em.transform);
                 }
 
+                for (RenameMapping rm : renameMappings) {
+                    renameElement(result, rm.from, rm.to, rm.removeEmptyParents);
+                }
+
                 mixElementSorter.fixOrder(result);
 
                 // Find relevant page element
@@ -314,6 +344,36 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         return PluginReturnValue.FINISH;
     }
 
+    private void renameElement(Element result, String from, String to, boolean removeEmptyParents) {
+        Optional<Element> optionalSource = getTarget(result, from);
+        if (optionalSource.isEmpty()) {
+            return;
+        }
+        Element source = optionalSource.get();
+        String value = source.getText();
+        Element target = getOrCreateTarget(result, to, NAMESPACE_MIX);
+        target.setText(value);
+        Parent parent = source.getParent();
+        parent.removeContent(source);
+        if (removeEmptyParents && parent instanceof Element) {
+            removeEmptyParents((Element) parent);
+        }
+    }
+
+    private void removeEmptyParents(Element node) {
+        node.getContent().stream()
+                .filter(c -> c instanceof Text && ((Text) c).getText().isBlank())
+                .toList() // omit concurrent modification issue
+                .forEach(c -> c.getParent().removeContent(c));
+        if (node.getContent().isEmpty()) {
+            Parent parent = node.getParent();
+            parent.removeContent(node);
+            if (parent instanceof Element) {
+                removeEmptyParents((Element) parent);
+            }
+        }
+    }
+
     private void saveTransformedValue(Element element, String value, String transform) {
         if (transform == null || transform.isBlank()) {
             element.setText(value);
@@ -347,6 +407,21 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         Element denominator = new Element("denominator", NAMESPACE_MIX);
         denominator.setText(parts[1]);
         return List.of(numerator, denominator);
+    }
+
+    private Optional<Element> getTarget(Element result, String target) {
+        String[] parts = target.split("/");
+        Element currentElement = result;
+        for (String currentPart : parts) {
+            Optional<Element> nextElement = currentElement.getChildren().stream()
+                    .filter(e -> e.getName().equals(currentPart))
+                    .findFirst();
+            if (nextElement.isEmpty()) {
+                return Optional.empty();
+            }
+            currentElement = nextElement.orElseThrow();
+        }
+        return Optional.of(currentElement);
     }
 
     private Element getOrCreateTarget(Element result, String target, Namespace namespace) {
