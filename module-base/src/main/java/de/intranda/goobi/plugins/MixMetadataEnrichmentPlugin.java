@@ -274,6 +274,9 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
             SAXBuilder jdomBuilder = XmlTools.getSAXBuilder();
             MixElementSorter mixElementSorter = new MixElementSorter();
 
+            // Remove existing technical metadata
+            dd.getAmdSec().getTechMdList().clear();
+
             for (AbstractMap.SimpleEntry<String, String> se : inputOutputList) {
                 Document jdomDocument = jdomBuilder.build(se.getValue());
 
