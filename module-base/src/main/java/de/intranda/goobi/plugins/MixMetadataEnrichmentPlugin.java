@@ -1,5 +1,38 @@
 package de.intranda.goobi.plugins;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import org.apache.commons.configuration.HierarchicalConfiguration;
+import org.apache.commons.configuration.SubnodeConfiguration;
+import org.apache.commons.digester.plugins.PluginException;
+import org.goobi.beans.Step;
+import org.goobi.production.enums.LogType;
+import org.goobi.production.enums.PluginGuiType;
+import org.goobi.production.enums.PluginReturnValue;
+import org.goobi.production.enums.PluginType;
+import org.goobi.production.enums.StepReturnValue;
+import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
+import org.jdom2.Document;
+import org.jdom2.Element;
+import org.jdom2.Namespace;
+import org.jdom2.Parent;
+import org.jdom2.Text;
+import org.jdom2.filter.Filters;
+import org.jdom2.input.SAXBuilder;
+import org.jdom2.xpath.XPathExpression;
+import org.jdom2.xpath.XPathFactory;
+
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
  * <p>
@@ -36,46 +69,12 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
-import org.apache.commons.configuration.HierarchicalConfiguration;
-import org.apache.commons.configuration.SubnodeConfiguration;
-import org.apache.commons.digester.plugins.PluginException;
-import org.goobi.beans.Step;
-import org.goobi.production.enums.LogType;
-import org.goobi.production.enums.PluginGuiType;
-import org.goobi.production.enums.PluginReturnValue;
-import org.goobi.production.enums.PluginType;
-import org.goobi.production.enums.StepReturnValue;
-import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
-import org.jdom2.Content;
-import org.jdom2.Document;
-import org.jdom2.Element;
-import org.jdom2.Namespace;
-import org.jdom2.Parent;
-import org.jdom2.Text;
-import org.jdom2.filter.Filters;
-import org.jdom2.input.SAXBuilder;
-import org.jdom2.xpath.XPathExpression;
-import org.jdom2.xpath.XPathFactory;
 import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
 import ugh.dl.Md;
 import ugh.exceptions.PreferencesException;
 import ugh.exceptions.ReadException;
-
-import java.io.File;
-import java.io.IOException;
-import java.math.BigInteger;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @PluginImplementation
 @Log4j2
@@ -120,7 +119,6 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
     private List<ExtraMapping> extraMappings;
     private VariableReplacer variableReplacer;
 
-
     private static final Namespace NAMESPACE_JHOVE = Namespace.getNamespace("jhove", "http://hul.harvard.edu/ois/xml/ns/jhove");
     private static final Namespace NAMESPACE_MIX = Namespace.getNamespace("mix", "http://www.loc.gov/mix/v20");
 
@@ -162,11 +160,9 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         return config.stream()
                 .flatMap(c -> c.configurationsAt("value").stream())
                 .map(c -> new RenameMapping(
-                                c.getString("@from"),
-                                c.getString("@to"),
-                                c.getBoolean("@removeEmptyParents", false)
-                        )
-                )
+                        c.getString("@from"),
+                        c.getString("@to"),
+                        c.getBoolean("@removeEmptyParents", false)))
                 .collect(Collectors.toList());
     }
 
@@ -174,11 +170,9 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         return config.stream()
                 .flatMap(c -> c.configurationsAt("value").stream())
                 .map(c -> new ExtraMapping(
-                                c.getString("@source"),
-                                c.getString("@target"),
-                                c.getString("@transform")
-                        )
-                )
+                        c.getString("@source"),
+                        c.getString("@target"),
+                        c.getString("@transform")))
                 .collect(Collectors.toList());
     }
 
@@ -231,7 +225,7 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         try {
             Calendar calendar = Calendar.getInstance();
             App app = new App(MixMetadataEnrichmentPlugin.class.getSimpleName(), "1.0",
-                    new int[]{calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)}, "jHove", "");
+                    new int[] { calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH) }, "jHove", "");
 
             JhoveBase jhoveBase = new JhoveBase();
 
@@ -264,7 +258,7 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
             }
 
             for (AbstractMap.SimpleEntry<String, String> se : inputOutputList) {
-                jhoveBase.dispatch(app, module, null, xmlHandler, se.getValue(), new String[]{se.getKey()});
+                jhoveBase.dispatch(app, module, null, xmlHandler, se.getValue(), new String[] { se.getKey() });
             }
 
             // After all jhove metadata files have been generated, populate the mets file
@@ -275,7 +269,9 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
             MixElementSorter mixElementSorter = new MixElementSorter();
 
             // Remove existing technical metadata
-            dd.getAmdSec().getTechMdList().clear();
+            if (dd.getAmdSec() != null) {
+                dd.getAmdSec().getTechMdList().clear();
+            }
 
             for (AbstractMap.SimpleEntry<String, String> se : inputOutputList) {
                 Document jdomDocument = jdomBuilder.build(se.getValue());
@@ -318,7 +314,8 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
                 String currentImageName = Paths.get(se.getKey()).getFileName().toString();
                 Optional<DocStruct> page = Optional.empty();
                 if (physical.getAllChildren() != null) {
-                    page = physical.getAllChildren().stream()
+                    page = physical.getAllChildren()
+                            .stream()
                             .filter(p -> filePrefixEquals(p.getImageName(), currentImageName))
                             .findFirst();
                 }
@@ -364,7 +361,8 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
     }
 
     private void removeEmptyParents(Element node) {
-        node.getContent().stream()
+        node.getContent()
+                .stream()
                 .filter(c -> c instanceof Text && ((Text) c).getText().isBlank())
                 .toList() // omit concurrent modification issue
                 .forEach(c -> c.getParent().removeContent(c));
@@ -416,7 +414,8 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         String[] parts = target.split("/");
         Element currentElement = result;
         for (String currentPart : parts) {
-            Optional<Element> nextElement = currentElement.getChildren().stream()
+            Optional<Element> nextElement = currentElement.getChildren()
+                    .stream()
                     .filter(e -> e.getName().equals(currentPart))
                     .findFirst();
             if (nextElement.isEmpty()) {
@@ -431,7 +430,8 @@ public class MixMetadataEnrichmentPlugin implements IStepPluginVersion2 {
         String[] parts = target.split("/");
         Element currentElement = result;
         for (String currentPart : parts) {
-            Optional<Element> nextElement = currentElement.getChildren().stream()
+            Optional<Element> nextElement = currentElement.getChildren()
+                    .stream()
                     .filter(e -> e.getName().equals(currentPart))
                     .findFirst();
             if (nextElement.isEmpty()) {
